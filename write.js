@@ -8,7 +8,7 @@ async function connectModbus() {
   await client.connectRTUBuffered(port, { baudRate: 9600 });
   client.setID(3);
   console.log("Connected to Modbus RTU");
-  console.log("Hello")
+
 
   try {
     // เขียนค่า 0x0008 (8 decimal) ไปที่ Register Address 0x0002 (2 decimal)
