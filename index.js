@@ -45,7 +45,7 @@ app.get("/branches", async (req, res) => {
   }
 });
 
-// fuel level ต้องทำเป็น websocket
+
 app.get("/fuel_level", async (req, res) => {
   try {
     const { rows } = await pool.query(`
@@ -58,6 +58,32 @@ app.get("/fuel_level", async (req, res) => {
     res.status(500).send("DB Error");
   }
 });
+
+app.post("/fuel_level", async (req, res) => {
+  const {
+    timestamp, tank_id, oil_h, oil_v, oil_p,
+    water_h, water_v, water_p, ullage, temp, status
+  } = req.body;
+
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO fuel_level (
+         timestamp, tank_id, oil_h, oil_v, oil_p,
+         water_h, water_v, water_p, ullage, temp, status
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       RETURNING *`,
+      [
+        timestamp, tank_id, oil_h, oil_v, oil_p,
+        water_h, water_v, water_p, ullage, temp, status
+      ]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("DB Error");
+  }
+});
+
 
 // Fuel Loding ======================================== 
 app.get("/fuel_loading", async (req, res) => {
@@ -163,6 +189,8 @@ app.get("/tanks", async (req, res) => {
   }
 });
 
+
+
 app.post("/tanks", async (req, res) => {
   const {
     probe_id, fuel_name, capacity, fuel_density, tank_length,
@@ -253,6 +281,27 @@ app.delete("/tanks/:id", async (req, res) => {
 });
 
 
+
+app.get("/fuel_level/realtime", async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT 
+        f.timestamp,
+        f.oil_v,
+        f.temp,
+        t.fuel_name,
+        t.capacity
+      FROM fuel_level f
+      JOIN tanks t
+        ON f.tank_id = t.tank_id
+      
+    `);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("DB Error");
+  }
+});
 
 
 

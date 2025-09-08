@@ -9,11 +9,14 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "axios": "^1.11.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.2",
     "express": "^5.1.0",
     "mariadb": "^3.4.5",
+    "modbus-serial": "^8.0.21-no-serial-port",
     "nodemon": "^3.1.10",
-    "pg": "^8.16.3"
+    "pg": "^8.16.3",
+    "serialport": "^13.0.0"
   }
 }
