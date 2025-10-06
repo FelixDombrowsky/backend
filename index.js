@@ -1,312 +1,226 @@
 // app.js
-const express = require("express");
-const { Pool } = require("pg");
-const cors = require("cors");
-const app = express();
-require('dotenv').config()
-const port = 8800;
+import express from "express"
+import cors from "cors"
+import http from "http"
+import { WebSocketServer } from "ws"
 
-// ตั้งค่าการเชื่อมต่อ TimescaleDB
-const pool = new Pool({
-  user: process.env.DB_USER,       
-  host: process.env.DB_HOST,      
-  database: process.env.DB_DATABASE,      
-  password: process.env.DB_PASSWORD,  
-  port: 5432,             
-});
+import fuelRoutes from "./routes/fuelRoutes.js"
+import probeRoutes from "./routes/probeRoutes.js"
+import tankRoutes from "./routes/tankRoutes.js"
 
-app.use(express.json());
-app.use(cors());
+dotenv.config()
 
+// Express + WebSocket
+const port = 8800
+const app = express()
+const server = http.createServer(app)
+const wss = new WebSocketServer({ server })
 
-app.get("/admin", async (req, res) => {
-  try {
-    const { rows } = await pool.query(`
-      SELECT username, pass
-      FROM admin
-    `);
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("DB Error");
-  }
-});
+// Middle
+app.use(express.json())
+app.use(cors())
 
-app.get("/branches", async (req, res) => {
-  try {
-    const { rows } = await pool.query(`
-      SELECT id, branch_name, branch_code
-      FROM branches
-    `);
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("DB Error");
-  }
-});
+// Register Routes
+app.use("/api/fuel", fuelRoutes)
+app.use("/api/probe", probeRoutes)
+app.use("/api/tank", tankRoutes)
 
+import dotenv from "dotenv"
 
-app.get("/fuel_level", async (req, res) => {
-  try {
-    const { rows } = await pool.query(`
-      SELECT id, timestamp, tank_id, oil_h, oil_v,oil_p,water_h,water_v,water_p,ullage,temp,status
-      FROM fuel_level
-    `);
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("DB Error");
-  }
-});
+/////////////////////////////////////////////////////////////////////////////////////
 
-app.post("/fuel_level", async (req, res) => {
-  const {
-    timestamp, tank_id, oil_h, oil_v, oil_p,
-    water_h, water_v, water_p, ullage, temp, status
-  } = req.body;
+// let connected = false
+// let probeConfigs = {}
+// let probeIdList = []
+// let currentIndex = 0
 
-  try {
-    const { rows } = await pool.query(
-      `INSERT INTO fuel_level (
-         timestamp, tank_id, oil_h, oil_v, oil_p,
-         water_h, water_v, water_p, ullage, temp, status
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-       RETURNING *`,
-      [
-        timestamp, tank_id, oil_h, oil_v, oil_p,
-        water_h, water_v, water_p, ullage, temp, status
-      ]
-    );
-    res.status(201).json(rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("DB Error");
-  }
-});
+// โหลด probe setting จาก DB
+// async function loadProbeConfigs() {
+//   const { rows } = await pool.query(`
+//     SELECT probe_id, probe_type_id,
+//            oil_h_address, oil_h_scale,
+//            water_h_address, water_h_scale,
+//            temp_address, temp_scale,
+//            format, function_code, address_length
+//     FROM probe_setting
+//     ORDER BY probe_id ASC
+//   `)
+//   console.log("probesetting: ", rows)
 
+//   probeConfigs = {}
+//   probeIdList = []
 
-// Fuel Loding ======================================== 
-app.get("/fuel_loading", async (req, res) => {
-  try {
-    const { rows } = await pool.query(`
-      SELECT id, timestamp, tank_id,start_time,end_time,start_h,end_h,start_v,end_v,load_v
-      FROM fuel_loading
-    `);
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("DB Error");
-  }
-});
+//   rows.forEach((row) => {
+//     probeConfigs[row.probe_id] = row
+//     probeIdList.push(row.probe_id)
+//   })
 
-app.post("/fuel_loading", async (req, res) => {
-  const {
-    timestamp,tank_id,start_time,end_time,start_h,
-    end_h,start_v,end_v,load_v
-  } = req.body;
+//   console.log("✅ Loaded probe configs:", probeConfigs)
+// }
 
-  try{
-    const { rows } = await pool.query(
-      `INSERT INTO fuel_loading (timestamp,tank_id,start_time,end_time,start_h,end_h,start_v,end_v,load_v)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       RETURNING *`,
-      [timestamp,tank_id,start_time,end_time,start_h,end_h,start_v,end_v,load_v]
-    );
-    res.status(201).json(rows[0]);
+// อ่านแบบ safe (split block ไม่เกิน maxLen ต่อครั้ง)
+// async function readRegistersSafe(client, func, start, totalLen, maxLen = 20) {
+//   let raw = []
+//   let addr = start
 
-  }catch (err) {
-    console.error(err);
-    res.status(500).send("DB Error");
-  };
+//   while (addr < start + totalLen) {
+//     const len = Math.min(maxLen, start + totalLen - addr)
+//     let res
+//     if (func === "03") {
+//       res = await client.readHoldingRegisters(addr, len)
+//     } else if (func === "04") {
+//       res = await client.readInputRegisters(addr, len)
+//     } else {
+//       throw new Error(`Unsupported function code ${func}`)
+//     }
+//     raw = raw.concat(res.data)
+//     addr += len
+//   }
 
-});
+//   return raw
+// }
 
+// Connect Modbus port
+// async function connectPort() {
+//   try {
+//     await client.connectRTUBuffered(serialPort, { baudRate })
+//     client.setTimeout(2000)
+//     connected = true
+//     console.log("✅ Connected Modbus port")
+//   } catch (err) {
+//     connected = false
+//     console.error("❌ Modbus connect fail:", err.message)
+//     setTimeout(connectPort, 2000)
+//   }
+// }
 
-// Leak Testing =======================================
-app.get("/leak_test", async (req, res) => {
-  try {
-    const { rows } = await pool.query(`
-      SELECT id, timestamp, tank_id,start_time,end_time,start_h,end_h,start_v,end_v,flow_rate
-      FROM leak_test
-    `);
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("DB Error");
-  }
-});
+// ฟังก์ชัน reorder byte
+// function reorder(words, format) {
+//   let w0_hi = (words[0] >> 8) & 0xff
+//   let w0_lo = words[0] & 0xff
+//   let w1_hi = (words[1] >> 8) & 0xff
+//   let w1_lo = words[1] & 0xff
 
-app.post("/leak_test", async (req, res) => {
-  const {
-    timestamp,tank_id,start_time,end_time,start_h,
-    end_h,start_v,end_v,flow_rate
-  } = req.body;
+//   switch (format) {
+//     case "AB CD":
+//       return Buffer.from([w0_hi, w0_lo, w1_hi, w1_lo])
+//     case "CD AB":
+//       return Buffer.from([w1_hi, w1_lo, w0_hi, w0_lo])
+//     case "BA DC":
+//       return Buffer.from([w0_lo, w0_hi, w1_lo, w1_hi])
+//     case "DC BA":
+//       return Buffer.from([w1_lo, w1_hi, w0_lo, w0_hi])
+//     default:
+//       return Buffer.from([w0_hi, w0_lo, w1_hi, w1_lo])
+//   }
+// }
 
-  try{
-    const { rows } = await pool.query(
-      `INSERT INTO leak_test (timestamp,tank_id,start_time,end_time,start_h,end_h,start_v,end_v,flow_rate)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       RETURNING *`,
-      [timestamp,tank_id,start_time,end_time,start_h,end_h,start_v,end_v,flow_rate]
-    );
-    res.status(201).json(rows[0]);
+// อ่าน sensor ค่าเดียว (float/word)
+// function parseValue(raw, addr, length, scale, format) {
+//   if (addr < 0) return null // -1 หมายถึงไม่ได้ใช้
+//   if (length === 2) {
+//     const buf = reorder(raw.slice(addr, addr + 2), format)
+//     return buf.readFloatBE(0) * scale
+//   } else {
+//     return raw[addr] * scale
+//   }
+// }
 
-  }catch (err) {
-    console.error(err);
-    res.status(500).send("DB Error");
-  };
+// async function readProbe(probe_id) {
+//   if (!connected) return null
+//   const config = probeConfigs[probe_id]
+//   if (!config) return null
 
-});
+//   try {
+//     client.setID(probe_id)
 
-// Probe ==============================================
-app.get("/probes", async (req, res) => {
-  try {
-    const { rows } = await pool.query(`
-      SELECT probe_id, probe_type
-      FROM probes
-    `);
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("DB Error");
-  }
-});
+//     // 👉 หาว่าต้องอ่านถึง address ไหน
+//     const maxAddr = Math.max(
+//       config.oil_h_address,
+//       config.water_h_address,
+//       config.temp_address
+//     )
+//     const totalLength = (maxAddr >= 0 ? maxAddr : 0) + config.address_length
 
+//     // ใช้ safe reader แทนการอ่านตรง
+//     const raw = await readRegistersSafe(
+//       client,
+//       config.function_code,
+//       0,
+//       totalLength,
+//       20
+//     )
 
-// tanks ==============================================
-app.get("/tanks", async (req, res) => {
-  try {
-    const {rows} = await pool.query(`
-      SELECT tank_id,probe_id,fuel_name,capacity,fuel_density,tank_length,hori_diameter,verti_diameter,
-      level_comp, tank_type, unit, high_alarm, high_alert, low_alarm, tank_colors, branch_code
-      FROM tanks
-    `);
-    console.log(rows)
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("DB Error");
-  }
-});
+//     const oil_h = parseValue(
+//       raw,
+//       config.oil_h_address,
+//       config.address_length,
+//       config.oil_h_scale,
+//       config.format
+//     )
+//     const water_h = parseValue(
+//       raw,
+//       config.water_h_address,
+//       config.address_length,
+//       config.water_h_scale,
+//       config.format
+//     )
+//     const temp = parseValue(
+//       raw,
+//       config.temp_address,
+//       config.address_length,
+//       config.temp_scale,
+//       config.format
+//     )
 
+//     const data = { probe_id, oil_h, water_h, temp, timestamp: new Date() }
 
+//     broadcastData(data)
+//     return data
+//   } catch (err) {
+//     console.error(`🚨 Read probe ${probe_id} error:`, err.message)
+//     return null
+//   }
+// }
 
-app.post("/tanks", async (req, res) => {
-  const {
-    probe_id, fuel_name, capacity, fuel_density, tank_length,
-    hori_diameter, verti_diameter, level_comp, tank_type, unit,
-    high_alarm, high_alert, low_alarm, tank_colors, branch_code
-  } = req.body;
+// broadcast ไป client ทั้งหมด
+// function broadcastData(data) {
+//   wss.clients.forEach((ws) => {
+//     if (ws.readyState === WebSocket.OPEN) {
+//       ws.send(JSON.stringify(data))
+//     }
+//   })
+// }
 
-  try{
-    const { rows } = await pool.query(
-      `INSERT INTO tanks (probe_id, fuel_name, capacity, fuel_density, tank_length, hori_diameter, verti_diameter,
-        level_comp, tank_type, unit, high_alarm, high_alert, low_alarm, tank_colors, branch_code)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-       RETURNING *`,
-      [probe_id, fuel_name, capacity, fuel_density, tank_length, hori_diameter, verti_diameter,
-       level_comp, tank_type, unit, high_alarm, high_alert, low_alarm, tank_colors, branch_code]
-    );
-    res.status(201).json(rows[0]);
+// Loop polling ทุก 1s (round-robin)
+// async function scheduleNext() {
+//   if (probeIdList.length === 0) {
+//     setTimeout(scheduleNext, 1000)
+//     return
+//   }
 
-  }catch (err) {
-    console.error(err);
-    res.status(500).send("DB Error");
-  };
+//   const id = probeIdList[currentIndex]
+//   await readProbe(id)
 
-});
+//   currentIndex = (currentIndex + 1) % probeIdList.length
+//   setTimeout(scheduleNext, 1000)
+// }
 
-app.put("/tanks/:id", async (req, res) => {
-  const {id} = req.params;
-  const {
-    probe_id, fuel_name, capacity, fuel_density, tank_length,
-    hori_diameter, verti_diameter, level_comp, tank_type, unit,
-    high_alarm, high_alert, low_alarm, tank_colors, branch_code
-  } = req.body;
+// WebSocket
+// wss.on("connection", (ws) => {
+//   console.log("🔗 WebSocket client connected")
+//   ws.on("close", () => console.log("❌ Client disconnected"))
+// })
 
-  try{
-    const {rows} = await pool.query(
-      `UPDATE tanks
-       SET probe_id = $1,
-           fuel_name = $2,
-           capacity = $3,
-           fuel_density = $4,
-           tank_length = $5,
-           hori_diameter = $6,
-           verti_diameter = $7,
-           level_comp = $8,
-           tank_type = $9,
-           unit = $10,
-           high_alarm = $11,
-           high_alert = $12,
-           low_alarm = $13,
-           tank_colors = $14,
-           branch_code = $15
-        WHERE tank_id = $16
-        RETURNING *`,
-        [probe_id, fuel_name, capacity, fuel_density, tank_length, hori_diameter, verti_diameter,
-         level_comp, tank_type, unit, high_alarm, high_alert, low_alarm, tank_colors, branch_code, id]
-    );
-    if(rows.length === 0){
-      return res.status(404).json({ message: "Tank not found" });
-    }
-    res.json(rows[0]);
+// Start server
+// ;(async () => {
+//   await connectPort()
+//   await loadProbeConfigs()
+//   scheduleNext()
+// })()
 
-  }catch(err){
-    console.log(err);
-    res.status(500).send("DB Error");
-  };
+////////////////////////////////////////////////////////////////////////
+
+server.listen(port, () => {
+  console.log(`Server + WebSocket running at http://localhost:${port}`)
 })
-
-app.delete("/tanks/:id", async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    const { rows } = await pool.query(
-      `DELETE FROM tanks
-       WHERE tank_id = $1
-       RETURNING *`,
-      [id]
-    );
-
-    if (rows.length === 0) {
-      return res.status(404).json({ message: "Tank not found" });
-    }
-
-    res.json({ message: "Tank deleted successfully", tank: rows[0] });
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("DB Error");
-  }
-});
-
-
-
-app.get("/fuel_level/realtime", async (req, res) => {
-  try {
-    const { rows } = await pool.query(`
-      SELECT 
-        f.timestamp,
-        f.oil_v,
-        f.temp,
-        t.fuel_name,
-        t.capacity
-      FROM fuel_level f
-      JOIN tanks t
-        ON f.tank_id = t.tank_id
-      
-    `);
-    res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).send("DB Error");
-  }
-});
-
-
-
-
-
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
-});

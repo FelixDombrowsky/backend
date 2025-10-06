@@ -1,8 +1,10 @@
 {
   "name": "backend",
   "version": "1.0.0",
+  "type": "module",
   "main": "index.js",
   "scripts": {
+    "dev": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
@@ -17,6 +19,7 @@
     "modbus-serial": "^8.0.21-no-serial-port",
     "nodemon": "^3.1.10",
     "pg": "^8.16.3",
-    "serialport": "^13.0.0"
+    "serialport": "^13.0.0",
+    "ws": "^8.18.3"
   }
 }
