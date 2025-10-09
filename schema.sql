@@ -1,0 +1,21 @@
+CREATE TABLE tank_setting (
+    code VARCHAR(10) NOT NULL,
+    tank_name VARCHAR(100) NOT NULL,
+    probe_id INT NOT NULL,
+    fuel_code VARCHAR(10) NOT NULL,
+    capacity_l DECIMAL(12,2),
+    tank_type INT,
+    vertical_mm DECIMAL(12,2),
+    horizontal_mm DECIMAL(12,2),
+    length_mm DECIMAL(12,2),
+    cal_capacity_l DECIMAL(12,2),
+    comp_oil_mm DECIMAL(12,2),
+    comp_water_mm DECIMAL(12,2),
+    high_alarm_l DECIMAL(12,2),
+    high_alert_l DECIMAL(12,2),
+    low_alarm_l DECIMAL(12,2),
+    water_high_alarm_l DECIMAL(12,2),
+    PRIMARY KEY (code),
+    FOREIGN KEY (probe_id) REFERENCES probe_setting(probe_id),
+    FOREIGN KEY (fuel_code) REFERENCES fuel_names(fuel_code)
+);
