@@ -217,10 +217,14 @@ export const trainTankGuide = async (req, res) => {
     }
 
     // ✅ ฟังก์ชันคำนวณพื้นที่วงรีแนวนอน
+
+    // Horizontal Tank
     const A = (a, b, h) => {
       const ry = b / 2
       const rx = a / 2
-      const u = h / ry - 1
+      const hh = Math.max(0, Math.min(h, b))
+
+      const u = hh / ry - 1
       if (u < -1) return 0
       if (u > 1) return Math.PI * rx * ry
       const sqrtTerm = Math.sqrt(1 - u * u)
@@ -228,9 +232,15 @@ export const trainTankGuide = async (req, res) => {
     }
 
     // ✅ ฟังก์ชัน fitting สำหรับ Levenberg-Marquardt
+
     const fittingFunction = (params) => {
       const [a, b, L] = params
-      return (h) => (L * A(a, b, h)) / 1_000_000 // mm³ → L
+
+      if (tank_type == 1) {
+        return (h) => (L * A(a, b, h)) / 1_000_000 // mm³ → L
+      } else {
+        return (h) => (Math.PI * (a / 2) * (b / 2) * h) / 1_000_000
+      }
     }
 
     // ✅ กำหนดค่าพารามิเตอร์เริ่มต้นและ options

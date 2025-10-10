@@ -1,8 +1,8 @@
-// app.js
 import express from "express"
 import cors from "cors"
 import http from "http"
-import { WebSocketServer } from "ws"
+import dotenv from "dotenv"
+import { initWebSocket } from "./websocket/wsServer.js"
 
 import fuelRoutes from "./routes/fuelRoutes.js"
 import probeRoutes from "./routes/probeRoutes.js"
@@ -10,22 +10,21 @@ import tankRoutes from "./routes/tankRoutes.js"
 
 dotenv.config()
 
-// Express + WebSocket
-const port = 8800
+const port = process.env.PORT || 8000
 const app = express()
 const server = http.createServer(app)
-const wss = new WebSocketServer({ server })
 
-// Middle
+// Middleware
 app.use(express.json())
 app.use(cors())
 
-// Register Routes
+// API Routes
 app.use("/api/fuel", fuelRoutes)
 app.use("/api/probe", probeRoutes)
 app.use("/api/tank", tankRoutes)
 
-import dotenv from "dotenv"
+// WebSocket
+initWebSocket(server)
 
 /////////////////////////////////////////////////////////////////////////////////////
 
